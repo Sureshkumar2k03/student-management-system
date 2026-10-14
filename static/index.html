@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Student Management System</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  :root { --bg:#f4f6fb; --card:#fff; --ink:#1d2433; --mute:#6b7488; --line:#e3e7f0; --brand:#3b5bdb; --bad:#d63031; --ok:#2b8a3e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
+  .wrap { max-width: 1050px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .sub { color: var(--mute); margin: 0 0 20px; font-size: .9rem; }
+  .stats { display:grid; grid-template-columns: repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:20px; }
+  .stat, .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .stat b { display:block; font-size:1.4rem; margin-top:4px; }
+  .stat span { color:var(--mute); font-size:.8rem; }
+  .grid { display:grid; grid-template-columns: 320px 1fr; gap:16px; align-items:start; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  label { display:block; font-size:.8rem; color:var(--mute); margin:10px 0 4px; }
+  input { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  input:focus { outline:2px solid var(--brand); outline-offset:-1px; }
+  button { font:inherit; border:0; border-radius:6px; padding:8px 14px; cursor:pointer; background:var(--brand); color:#fff; }
+  button.ghost { background:#eef1fb; color:var(--brand); }
+  button.danger { background:#fdecec; color:var(--bad); }
+  .row { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  .toolbar { display:flex; gap:8px; margin-bottom:12px; }
+  table { width:100%; border-collapse:collapse; font-size:.9rem; }
+  th, td { text-align:left; padding:9px 8px; border-bottom:1px solid var(--line); }
+  th { color:var(--mute); font-weight:600; font-size:.75rem; text-transform:uppercase; letter-spacing:.04em; }
+  .grade { display:inline-block; min-width:28px; text-align:center; padding:2px 8px; border-radius:99px; background:#eef1fb; color:var(--brand); font-weight:600; font-size:.8rem; }
+  .grade.F { background:#fdecec; color:var(--bad); }
+  .msg { padding:10px 12px; border-radius:6px; margin-bottom:14px; font-size:.9rem; }
+  .msg.err { background:#fdecec; color:var(--bad); }
+  .msg.ok { background:#e9f7ee; color:var(--ok); }
+  .empty { color:var(--mute); text-align:center; padding:30px 0; }
+  .hint { font-size:.75rem; color:var(--mute); margin-top:4px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+
+// "Python=80, Maths=70"  <->  {Python: 80, Maths: 70}
+const parseMarks = (text) =>
+  Object.fromEntries(
+    text.split(",").map((p) => p.trim()).filter(Boolean).map((p) => {
+      const [k, ...v] = p.split("=");
+      return [k.trim(), v.join("=").trim()];
+    })
+  );
+const formatMarks = (m) => Object.entries(m || {}).map(([k, v]) => `${k}=${v}`).join(", ");
+
+const EMPTY = { student_id: "", name: "", age: "", course: "", marks: "" };
+
+function StudentForm({ editing, onSaved, onCancel, setMsg }) {
+  const [form, setForm] = useState(EMPTY);
+
+  useEffect(() => {
+    setForm(editing ? { ...editing, marks: formatMarks(editing.marks) } : EMPTY);
+  }, [editing]);
+
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const body = JSON.stringify({ ...form, marks: parseMarks(form.marks) });
+    try {
+      if (editing) await api(`/api/students/${editing.student_id}`, { method: "PUT", body });
+      else await api("/api/students", { method: "POST", body });
+      setMsg({ type: "ok", text: editing ? "Student updated." : "Student added." });
+      setForm(EMPTY);
+      onSaved();
+    } catch (err) {
+      setMsg({ type: "err", text: err.message });
+    }
+  };
+
+  return (
+    <form className="card" onSubmit={submit}>
+      <b>{editing ? `Edit ${editing.student_id}` : "Add student"}</b>
+      <label>Student ID</label>
+      <input value={form.student_id} onChange={set("student_id")} disabled={!!editing} placeholder="S101" />
+      <label>Name</label>
+      <input value={form.name} onChange={set("name")} placeholder="Suresh Kumar" />
+      <label>Age</label>
+      <input type="number" value={form.age} onChange={set("age")} />
+      <label>Course</label>
+      <input value={form.course} onChange={set("course")} placeholder="BCA" />
+      <label>Marks</label>
+      <input value={form.marks} onChange={set("marks")} placeholder="Python=85, Maths=72" />
+      <div className="hint">Format: Subject=Score, comma separated (0–100)</div>
+      <div className="row">
+        <button type="submit">{editing ? "Save changes" : "Add student"}</button>
+        {editing && <button type="button" className="ghost" onClick={onCancel}>Cancel</button>}
+      </div>
+    </form>
+  );
+}
+
+function App() {
+  const [students, setStudents] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [query, setQuery] = useState("");
+  const [editing, setEditing] = useState(null);
+  const [msg, setMsg] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [list, st] = await Promise.all([
+        api(`/api/students?q=${encodeURIComponent(query)}`),
+        api("/api/stats"),
+      ]);
+      setStudents(list);
+      setStats(st);
+    } catch (err) {
+      setMsg({ type: "err", text: err.message });
+    }
+  }, [query]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const remove = async (s) => {
+    if (!confirm(`Delete ${s.name}?`)) return;
+    try {
+      await api(`/api/students/${s.student_id}`, { method: "DELETE" });
+      setMsg({ type: "ok", text: `Deleted ${s.name}.` });
+      if (editing && editing.student_id === s.student_id) setEditing(null);
+      load();
+    } catch (err) { setMsg({ type: "err", text: err.message }); }
+  };
+
+  const seed = async () => {
+    try {
+      const r = await api("/api/seed?count=5", { method: "POST" });
+      setMsg({ type: "ok", text: `Generated ${r.added} sample students.` });
+      load();
+    } catch (err) { setMsg({ type: "err", text: err.message }); }
+  };
+
+  return (
+    <div className="wrap">
+      <h1>Student Management System</h1>
+      <p className="sub">Core Python backend · React frontend</p>
+
+      {stats && (
+        <div className="stats">
+          <div className="stat"><span>Students</span><b>{stats.count}</b></div>
+          <div className="stat"><span>Class average</span><b>{stats.class_average}</b></div>
+          <div className="stat"><span>Topper</span><b>{stats.topper ? stats.topper.name : "—"}</b></div>
+          <div className="stat"><span>Grades</span><b style={{fontSize:"1rem"}}>
+            {Object.entries(stats.grades).map(([g, n]) => `${g}:${n}`).join("  ") || "—"}
+          </b></div>
+        </div>
+      )}
+
+      {msg && <div className={`msg ${msg.type}`}>{msg.text}</div>}
+
+      <div className="grid">
+        <StudentForm editing={editing} setMsg={setMsg}
+          onSaved={() => { setEditing(null); load(); }}
+          onCancel={() => setEditing(null)} />
+
+        <div className="card">
+          <div className="toolbar">
+            <input placeholder="Search name, ID or course…" value={query}
+                   onChange={(e) => setQuery(e.target.value)} />
+            <button className="ghost" onClick={seed}>+ 5 samples</button>
+          </div>
+          {students.length === 0 ? (
+            <div className="empty">No students yet. Add one or generate samples.</div>
+          ) : (
+            <table>
+              <thead><tr>
+                <th>ID</th><th>Name</th><th>Course</th><th>Avg</th><th>Grade</th><th></th>
+              </tr></thead>
+              <tbody>
+                {students.map((s) => (
+                  <tr key={s.student_id}>
+                    <td>{s.student_id}</td>
+                    <td>{s.name}<div className="hint">{formatMarks(s.marks)}</div></td>
+                    <td>{s.course}</td>
+                    <td>{s.average}</td>
+                    <td><span className={`grade ${s.grade === "F" ? "F" : ""}`}>{s.grade}</span></td>
+                    <td style={{whiteSpace:"nowrap"}}>
+                      <button className="ghost" onClick={() => setEditing(s)}>Edit</button>{" "}
+                      <button className="danger" onClick={() => remove(s)}>Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
